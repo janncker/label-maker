@@ -64,9 +64,9 @@ The outer edges of a 12mm label do not appear to be printable (print head too na
 
 ## Python code
 
-The state here is what I hacked together. It prints images, but the status messages aren't complete and the main script needs tidying up.
+The code here currently is what I had at the point I got this working - it's a bit hacked together. It prints images, but the status messages aren't complete and the main script needs tidying up. The printer sometimes goes to an error state after printing (haven't figured out why yet), which can be cleared by pressing the power button once.
 
-It needs a few modules to run:
+This needs a few modules installed to run:
 
 ```
 pyserial
@@ -74,7 +74,7 @@ pypng
 packbits
 ```
 
-Then can be used as:
+Then it can be used as:
 
 ```sh
 # Existing image formated to spec above
