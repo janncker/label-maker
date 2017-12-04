@@ -69,9 +69,7 @@ def read_png(path):
     """ Read a (monochrome) PNG image and convert to 1bpp raw data
 
     This should work with any 8 bit PNG. To ensure compatibility, the image can
-    be processed with Imagemagick first:
-
-    convert image.
+    be processed with Imagemagick first using the -monochrome flag.
     """
 
     buf = bytearray()
