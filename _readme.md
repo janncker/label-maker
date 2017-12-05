@@ -8,7 +8,7 @@ Intitially I had a quick peek at the Android APK to see if there was any useful 
 
 Next I used the bluetooth sniffing capability of stock Android to capture a few label prints using the official app. Inspecting these packet captures in Wireshark, it was apparent that all of the communication was done using bluetooth's serial port profile (SPP). The printer also shows up as "Fujitsu" in the packet captures, and since Brother has a lot of label maker products I figured there was a good chance they were using some existing hardware and firmware with a bluetooth to serial adapter bolted on.
 
-After a little Googling, this hunch paid off - a whole bunch of developer documentation for Brother's higher-end label maker product that matched up with the bytes being sent over the bluetooth to serial connection. Mainly:
+After a little Googling, this hunch paid off - a bunch of developer documentation for some of Brother's higher-end label maker products that matched up with the bytes being sent over the bluetooth to serial connection. Mainly:
 
 - [PT-9500PC Command Reference: CBP-RASTER Mode (PTCBP Mode) Volume](http://etc.nkadesign.com/uploads/Printers/95CRRASE.pdf)
 
@@ -58,7 +58,7 @@ From a few Brother developer docs, the packet captures could be broken down as:
 
 Image data is sent to the printer as a 1-bit-per-pixel bitmap. The Brother app sends a 128 pixel wide image (regardless of tape width), oriented as lines across the print head. For a horizontal label (printing along the length of tape), the input image needs to be rotated by 90 degrees.
 
-Once in the correct orientation, image data needs to be mirrored horizontally. Presumably this is due to the orientation of the print head and the printer not having any built in compensation for this.
+Once in the correct orientation, image data needs to be mirrored horizontally (with the settings above at least). It looks like the command `1B 69 4D` can be used to enable mirroring by the printer, but I haven't tested this.
 
 The outer edges of a 12mm label do not appear to be printable (print head too narrow?). The outer 10-20 pixels on each side is not printed. I haven't tested with narrower labels.
 
