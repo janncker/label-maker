@@ -11,10 +11,11 @@ def as_unsigned_char(byte):
     return unsigned_char.unpack(byte)[0]
 
 def encode_raster_transfer(data):
-    """ Encode a raw 1 bit per pixel image for transfer to in """
+    """ Encode 1 bit per pixel image data for transfer over serial to the printer """
     buf = bytearray()
 
-    # The official app from Brother sends data in 16 byte chunks
+    # Send in chunks of 1 line (128px @ 1bpp = 16 bytes)
+    # This mirrors the official app from Brother. Other values haven't been tested.
     chunk_size = 16
 
     for i in xrange(0, len(data), chunk_size):
