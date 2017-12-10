@@ -1,4 +1,4 @@
-# Controlling the Brother P-Touch Cube from a computer
+# Controlling the Brother P-Touch Cube label maker from a computer
 
 The Brother PTP300BT label maker is intended to be controlled using the official Brother P-Touch Design & Print iOS/Android app. The app has arbitrary limits on what you can print (1 text object and up to 3 preset icons), so I thought it would be a fun challenge to reverse engineer the protocol to print whatever I wanted.
 
