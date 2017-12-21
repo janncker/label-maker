@@ -62,7 +62,7 @@ Image data is sent to the printer as a 1-bit-per-pixel bitmap. The Brother app s
 
 Once in the correct orientation, image data needs to be mirrored horizontally (with the settings above at least). It looks like the command `1B 69 4D` can be used to enable mirroring by the printer, but I haven't tested this.
 
-The outer edges of a 12mm label do not appear to be printable (print head too narrow?). The outer 10-20 pixels of each side (length-wise) is not printed. I haven't tested with narrower labels.
+The outer edges of a 12mm label do not appear to be printable (print head too narrow?). The outer 30 pixels of each side (length-wise) are not printed. I haven't tested with narrower labels.
 
 ## Python code
 
