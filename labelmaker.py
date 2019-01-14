@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 
-from labelmaker_encode import encode_raster_transfer, read_png, unsigned_char
+from labelmaker_encode import encode_raster_transfer, read_png
 
 import binascii
 import packbits
-import serial
+import bluetooth
 import sys
 import time
+import contextlib
 
 STATUS_OFFSET_BATTERY = 6
 STATUS_OFFSET_EXTENDED_ERROR = 7
@@ -34,106 +35,105 @@ STATUS_BATTERY = [
     "AC adapter in use"
 ]
 
+@contextlib.contextmanager
+def BluetoothSocketManager(*args, **kwargs):
+    sock = bluetooth.BluetoothSocket(*args, **kwargs)
+    yield sock
+    sock.close()
+
 def print_status(raw):
     if len(raw) != 32:
-        print "Error: status must be 32 bytes. Got " + len(raw)
+        print(f"Error: status must be 32 bytes. Got {len(raw)}")
         return
 
     if raw[STATUS_OFFSET_STATUS_TYPE] < len(STATUS_TYPE):
-        print "Status: " + STATUS_TYPE[raw[STATUS_OFFSET_STATUS_TYPE]]
+        print(f"Status: {STATUS_TYPE[raw[STATUS_OFFSET_STATUS_TYPE]]}")
     else:
-        print "Status: 0x" + binascii.hexlify(raw[STATUS_OFFSET_STATUS_TYPE])
+        print(f"Status: 0x{raw[STATUS_OFFSET_STATUS_TYPE]:02x}")
 
     if raw[STATUS_OFFSET_BATTERY] < len(STATUS_BATTERY):
-        print "Battery: " + STATUS_BATTERY[raw[STATUS_OFFSET_BATTERY]]
+        print(f"Battery: {STATUS_BATTERY[raw[STATUS_OFFSET_BATTERY]]}")
     else:
-        print "Battery: 0x" + binascii.hexlify(raw[STATUS_OFFSET_BATTERY])
+        print(f"Battery: 0x{raw[STATUS_OFFSET_BATTERY]:02x}")
 
-    print "Error info 1: 0x" + binascii.hexlify(raw[STATUS_OFFSET_ERROR_INFO_1])
-    print "Error info 2: 0x" + binascii.hexlify(raw[STATUS_OFFSET_ERROR_INFO_2])
-    print "Extended error: 0x" + binascii.hexlify(raw[STATUS_OFFSET_EXTENDED_ERROR])
-    print
+    print(f"Error info 1: 0x{raw[STATUS_OFFSET_ERROR_INFO_1]:02x}")
+    print(f"Error info 2: 0x{raw[STATUS_OFFSET_ERROR_INFO_2]:02x}")
+    print(f"Extended error: 0x{raw[STATUS_OFFSET_EXTENDED_ERROR]:02x}")
+    print()
 
 
 # Check for input image
-if len(sys.argv) < 2:
-    print "Usage: %s <path-to-image>" % sys.argv[0]
+if len(sys.argv) < 3:
+    print("Usage: %s <path-to-image> <bdaddr> [ch]" % sys.argv[0])
     sys.exit(1)
 
-# Get serial device
-ser = serial.Serial(
-    '/dev/rfcomm0',
-    baudrate=9600,
-    stopbits=serial.STOPBITS_ONE,
-    parity=serial.PARITY_NONE,
-    bytesize=8,
-    dsrdtr=True
-)
+addr = sys.argv[2]
+if len(sys.argv) < 4:
+    ch = 1
+else:
+    ch = sys.argv[3]
+# Get bluetooth socket
+with BluetoothSocketManager(bluetooth.RFCOMM) as ser:
+    ser.connect((addr, ch))
 
-print(ser.name)
+    # Read input image into memory
+    data = read_png(sys.argv[1])
 
-# Read input image into memory
-data = read_png(sys.argv[1])
+    # Enter raster graphics (PTCBP) mode
+    ser.send(b"\x1b\x69\x61\x01")
 
-# Enter raster graphics (PTCBP) mode
-ser.write(b"\x1b\x69\x61\x01")
+    # Initialize
+    ser.send(b"\x1b\x40")
 
-# Initialize
-ser.write(b"\x1b\x40")
+    # Dump status
+    ser.send(b"\x1b\x69\x53")
+    print_status( ser.recv(32) )
 
-# Dump status
-ser.write(b"\x1b\x69\x53")
-print_status( ser.read(size=32) )
+    # Flush print buffer
+    ser.send(b"\x00" * 64)
 
-# Flush print buffer
-for i in range(64):
-    ser.write(b"\x00")
+    # Initialize
+    ser.send(b"\x1b\x40")
 
-# Initialize
-ser.write(b"\x1b\x40")
+    # Enter raster graphics (PTCBP) mode
+    ser.send(b"\x1b\x69\x61\x01")
 
-# Enter raster graphics (PTCBP) mode
-ser.write(b"\x1b\x69\x61\x01")
+    # Found docs on http://www.undocprint.org/formats/page_description_languages/brother_p-touch
+    ser.send(b"\x1B\x69\x7A") # Set media & quality
+    ser.send(b"\xC4\x01") # print quality, continuous roll
+    ser.send(b"\x0C") # Tape width in mm
+    ser.send(b"\x00") # Label height in mm (0 for continuous roll)
 
-# Found docs on http://www.undocprint.org/formats/page_description_languages/brother_p-touch
-ser.write(b"\x1B\x69\x7A") # Set media & quality
-ser.write(b"\xC4\x01") # print quality, continuous roll
-ser.write(b"\x0C") # Tape width in mm
-ser.write(b"\x00") # Label height in mm (0 for continuous roll)
+    # Number of raster lines in image data
+    raster_lines = len(data) >> 4
+    ser.send(raster_lines.to_bytes(2, 'little'))
 
-# Number of raster lines in image data
-raster_lines = len(data) / 16
-print raster_lines, raster_lines % 256, int(raster_lines / 256)
-ser.write( unsigned_char.pack( raster_lines % 256 ) )
-ser.write( unsigned_char.pack( int(raster_lines / 256) ) )
+    # Unused data bytes in the "set media and quality" command
+    ser.send(b"\x00\x00\x00\x00")
 
-# Unused data bytes in the "set media and quality" command
-ser.write(b"\x00\x00\x00\x00")
+    # Set print chaining off (0x8) or on (0x0)
+    ser.send(b"\x1B\x69\x4B\x08")
 
-# Set print chaining off (0x8) or on (0x0)
-ser.write(b"\x1B\x69\x4B\x08")
+    # Set no mirror, no auto tape cut
+    ser.send(b"\x1B\x69\x4D\x00")
 
-# Set no mirror, no auto tape cut
-ser.write(b"\x1B\x69\x4D\x00")
+    # Set margin amount (feed amount)
+    ser.send(b"\x1B\x69\x64\x00\x00")
 
-# Set margin amount (feed amount)
-ser.write(b"\x1B\x69\x64\x00\x00")
+    # Set compression mode: TIFF
+    ser.send(b"\x4D\x02")
 
-# Set compression mode: TIFF
-ser.write(b"\x4D\x02")
+    # Send image data
+    print("Sending image data")
+    for line in encode_raster_transfer(data):
+        ser.send( line )
+    print("Done")
 
-# Send image data
-print("Sending image data")
-ser.write( encode_raster_transfer(data) )
-print "Done"
+    # Print and feed
+    ser.send(b"\x1A")
 
-# Print and feed
-ser.write(b"\x1A")
+    # Dump status that the printer returns
+    print_status( ser.recv(32) )
 
-# Dump status that the printer returns
-print_status( ser.read(size=32) )
-
-# Initialize
-ser.write(b"\x1b\x40")
-
-ser.close()
+    # Initialize
+    ser.send(b"\x1b\x40")

@@ -1,41 +1,39 @@
 import packbits
 import png
 import struct
+from io import BytesIO
 
 # "Raster graphics transfer" serial command
-TRANSFER_COMMAND = b"\x47"
-
-unsigned_char = struct.Struct('B');
-def as_unsigned_char(byte):
-    """ Interpret a byte as an unsigned int """
-    return unsigned_char.unpack(byte)[0]
+TRANSFER_COMMAND = b"G"
+ZERO_COMMAND = b"Z"
 
 def encode_raster_transfer(data):
     """ Encode 1 bit per pixel image data for transfer over serial to the printer """
-    buf = bytearray()
-
     # Send in chunks of 1 line (128px @ 1bpp = 16 bytes)
     # This mirrors the official app from Brother. Other values haven't been tested.
     chunk_size = 16
+    zero_line = bytearray(b'\x00' * chunk_size)
 
-    for i in xrange(0, len(data), chunk_size):
+    for i in range(0, len(data), chunk_size):
         chunk = data[i : i + chunk_size]
+        if chunk == zero_line:
+            yield ZERO_COMMAND
+            continue
 
+        buf = BytesIO()
         # Encode as tiff
         packed_chunk = packbits.encode(chunk)
 
         # Write header
-        buf.append(TRANSFER_COMMAND)
+        buf.write(TRANSFER_COMMAND)
 
         # Write number of bytes to transfer (n1 + n2*256)
         length = len(packed_chunk)
-        buf.append(unsigned_char.pack( int(length % 256) ))
-        buf.append(unsigned_char.pack( int(length / 256) ))
+        buf.write(length.to_bytes(2, 'little'))
 
         # Write data
-        buf.extend(packed_chunk)
-
-    return buf
+        buf.write(packed_chunk)
+        yield buf.getvalue()
 
 def decode_raster_transfer(data):
     """ Read data encoded as T encoded as TIFF with transfer headers """
@@ -46,9 +44,7 @@ def decode_raster_transfer(data):
     while i < len(data):
         if data[i] == TRANSFER_COMMAND:
             # Decode number of bytes to transfer
-            n1 = as_unsigned_char(data[i+1])
-            n2 = as_unsigned_char(data[i+2])
-            num_bytes = n1 + n2*256
+            num_bytes = int.from_bytes(data[i+1:i+3], little)
 
             # Copy contents of transfer to output buffer
             transferedData = data[i + 3 : i + 3 + num_bytes]
@@ -85,14 +81,14 @@ def read_png(path):
 
     # Loop over image and pack into 1bpp buffer
     for row in rows:
-        for pixel in xrange(0, len(row), 3):
+        for pixel in range(0, len(row), 3):
             bit_cursor -= 1
 
             if row[pixel] == 0:
                 byte |= (1 << bit_cursor)
 
             if bit_cursor == 0:
-                buf.append(unsigned_char.pack(byte))
+                buf.append(byte)
                 byte = 0
                 bit_cursor = 8
 
