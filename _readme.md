@@ -4,7 +4,7 @@ The Brother PTP300BT label maker is intended to be controlled using the official
 
 Python code at the bottom if you want to skip the fine details.
 
-**This is a fork of the original gist that adds Python 3 support (3.6+). If you want information on the protocol details please refer to the original version**
+**This is a fork of the original gist that adds Python 3 support (3.6+) and have various adjustments. If you want information on the protocol details please refer to the original version**
 
 ## Python code
 
@@ -32,7 +32,7 @@ convert inputimage.png -monochrome -gravity center -crop 128x -rotate 90 -flop o
 
 <strike>I was working on Linux, so the serial device is currently hard-coded as `/dev/rfcomm0`. On OSX, a `/dev/tty.*` device will show up once the printer is paired.</strike>
 
-Unlike the original version, this fork uses pybluez. So the printer needs to be referred using its BDADDR (can be found after pairing).
+Unlike the original version, this fork uses pybluez. So the printer needs to be referenced using its BDADDR. It can be found during/after pairing.
 
 To pair the printer with my Linux machine, I used:
 
