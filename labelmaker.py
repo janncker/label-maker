@@ -12,10 +12,13 @@ import ptstatus
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument('image', help='Image file to print.')
     p.add_argument('bdaddr', help='BDADDR of the printer.')
-    p.add_argument('-c', '--rfcomm-channel', help='RFCOMM channel.', default=1, type=int)
-    p.add_argument('-n', '--no-print', help='Do not send print command.', action='store_true')
+    p.add_argument('-i', '--image', help='Image file to print.')
+    p.add_argument('-c', '--rfcomm-channel', help='RFCOMM channel. Normally this does not need to be changed.', default=1, type=int)
+    p.add_argument('-n', '--no-print', help='Only configure the printer and send the image but do not send print command.', action='store_true')
+    p.add_argument('-F', '--no-feed', help='Disable feeding at the end of the print (chaining).')
+    p.add_argument('-a', '--auto-cut', help='Enable auto-cutting (or print label boundary on e.g. PT-P300BT).')
+    p.add_argument('-m', '--end-margin', help='End margin (in dots).', default=0, type=int)
     return p, p.parse_args()
 
 def reset_printer(ser):
@@ -28,35 +31,42 @@ def reset_printer(ser):
     # Enter raster graphics (PTCBP) mode
     ser.send(ptcbp.serialize_control('use_command_set', ptcbp.CommandSet.ptcbp))
 
-def configure_printer(ser, raster_lines):
+def configure_printer(ser, raster_lines, tape_dim, compress=True, chaining=False, auto_cut=False, end_margin=0):
     reset_printer(ser)
 
+    type_, width, length = tape_dim
     # Set media & quality
     ser.send(ptcbp.serialize_control_obj('set_print_parameters', ptcbp.PrintParameters(
         active_fields=(ptcbp.PrintParameterField.width |
                        ptcbp.PrintParameterField.quality |
                        ptcbp.PrintParameterField.recovery),
-        media_type=ptcbp.MediaType.laminated,
-        width_mm=12, # Tape width in mm
-        length_mm=0, # Label height in mm (0 for continuous roll)
+        media_type=type_,
+        width_mm=width, # Tape width in mm
+        length_mm=length, # Label height in mm (0 for continuous roll)
         length_px=raster_lines, # Number of raster lines in image data
         is_follow_up=0, # Unused
         sbz=0, # Unused
     )))
 
+    pm, pm2 = 0, 0
+    if not chaining:
+        pm2 |= ptcbp.PageModeAdvanced.no_page_chaining
+    if auto_cut:
+        pm |= ptcbp.PageMode.auto_cut
+
     # Set print chaining off (0x8) or on (0x0)
-    ser.send(ptcbp.serialize_control('set_page_mode_advanced', ptcbp.PageModeAdvanced.no_page_chaining))
+    ser.send(ptcbp.serialize_control('set_page_mode_advanced', pm2))
 
     # Set no mirror, no auto tape cut
-    ser.send(ptcbp.serialize_control('set_page_mode', 0x00))
+    ser.send(ptcbp.serialize_control('set_page_mode', pm))
 
     # Set margin amount (feed amount)
-    ser.send(ptcbp.serialize_control('set_page_margin', 0))
+    ser.send(ptcbp.serialize_control('set_page_margin', end_margin))
 
     # Set compression mode: TIFF
-    ser.send(ptcbp.serialize_control('compression', ptcbp.CompressionType.rle))
+    ser.send(ptcbp.serialize_control('compression', ptcbp.CompressionType.rle if compress else ptcbp.CompressionType.none))
 
-def do_print_job(ser, data, args):
+def do_print_job(ser, args, data):
     print('=> Querying printer status...')
 
     reset_printer(ser)
@@ -73,7 +83,12 @@ def do_print_job(ser, data, args):
     print('=> Configuring printer...')
 
     raster_lines = len(data) // 16
-    configure_printer(ser, raster_lines)
+    configure_printer(ser, raster_lines, (status.tape_type,
+                                          status.tape_width,
+                                          status.tape_length),
+                      chaining=args.no_feed,
+                      auto_cut=args.auto_cut,
+                      end_margin=args.end_margin)
 
     # Send image data
     print(f"=> Sending image data ({raster_lines} lines)...")
@@ -97,16 +112,21 @@ def do_print_job(ser, data, args):
 def main():
     p, args = parse_args()
 
-    # Read input image into memory
-    data = read_png(args.image)
+    data = None
+    if args.image is None:
+        p.error('An image must be specified for printing job.')
+    else:
+        # Read input image into memory
+        data = read_png(args.image)
+
     # Get bluetooth socket
     with contextlib.closing(bluetooth.BluetoothSocket(bluetooth.RFCOMM)) as ser:
         print('=> Connecting to printer...')
-
         ser.connect((args.bdaddr, args.rfcomm_channel))
 
         try:
-            do_print_job(ser, data, args)
+            assert data is not None
+            do_print_job(ser, args, data)
         finally:
             # Initialize
             reset_printer(ser)

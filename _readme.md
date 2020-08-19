@@ -22,7 +22,7 @@ Then it can be used as:
 
 ```sh
 # Existing image formated to spec above
-./labelmaker.py monochrome-128px-wide-image.png <bdaddr of your printer>
+./labelmaker.py <bdaddr of your printer> -i monochrome-128px-wide-image.png
 
 # Using imagemagick to get a usable input image from any horizontal oriented image
 # -resize 128x can be used instead of -crop 128x as needed
