@@ -2,65 +2,12 @@
 
 from labelmaker_encode import encode_raster_transfer, read_png
 
-import binascii
-import packbits
 import bluetooth
 import sys
-import time
 import contextlib
-
-STATUS_OFFSET_BATTERY = 6
-STATUS_OFFSET_EXTENDED_ERROR = 7
-STATUS_OFFSET_ERROR_INFO_1 = 8
-STATUS_OFFSET_ERROR_INFO_2 = 9
-STATUS_OFFSET_STATUS_TYPE = 18
-STATUS_OFFSET_PHASE_TYPE = 19
-STATUS_OFFSET_NOTIFICATION = 22
-
-STATUS_TYPE = [
-    "Reply to status request",
-    "Printing completed",
-    "Error occured",
-    "IF mode finished",
-    "Power off",
-    "Notification",
-    "Phase change",
-]
-
-STATUS_BATTERY = [
-    "Full",
-    "Half",
-    "Low",
-    "Change batteries",
-    "AC adapter in use"
-]
-
-@contextlib.contextmanager
-def BluetoothSocketManager(*args, **kwargs):
-    sock = bluetooth.BluetoothSocket(*args, **kwargs)
-    yield sock
-    sock.close()
-
-def print_status(raw):
-    if len(raw) != 32:
-        print(f"Error: status must be 32 bytes. Got {len(raw)}")
-        return
-
-    if raw[STATUS_OFFSET_STATUS_TYPE] < len(STATUS_TYPE):
-        print(f"Status: {STATUS_TYPE[raw[STATUS_OFFSET_STATUS_TYPE]]}")
-    else:
-        print(f"Status: 0x{raw[STATUS_OFFSET_STATUS_TYPE]:02x}")
-
-    if raw[STATUS_OFFSET_BATTERY] < len(STATUS_BATTERY):
-        print(f"Battery: {STATUS_BATTERY[raw[STATUS_OFFSET_BATTERY]]}")
-    else:
-        print(f"Battery: 0x{raw[STATUS_OFFSET_BATTERY]:02x}")
-
-    print(f"Error info 1: 0x{raw[STATUS_OFFSET_ERROR_INFO_1]:02x}")
-    print(f"Error info 2: 0x{raw[STATUS_OFFSET_ERROR_INFO_2]:02x}")
-    print(f"Extended error: 0x{raw[STATUS_OFFSET_EXTENDED_ERROR]:02x}")
-    print()
-
+import ctypes
+import ptcbp
+import ptstatus
 
 # Check for input image
 if len(sys.argv) < 3:
@@ -73,67 +20,89 @@ if len(sys.argv) < 4:
 else:
     ch = sys.argv[3]
 # Get bluetooth socket
-with BluetoothSocketManager(bluetooth.RFCOMM) as ser:
+with contextlib.closing(bluetooth.BluetoothSocket(bluetooth.RFCOMM)) as ser:
+    print('=> Connecting to printer...')
+
     ser.connect((addr, ch))
+
+    print('=> Querying printer status...')
 
     # Read input image into memory
     data = read_png(sys.argv[1])
 
+    # Flush print buffer
+    ser.send(b"\x00" * 64)
+
     # Enter raster graphics (PTCBP) mode
-    ser.send(b"\x1b\x69\x61\x01")
+    ser.send(ptcbp.serialize_control('use_command_set', ptcbp.CommandSet.ptcbp))
 
     # Initialize
-    ser.send(b"\x1b\x40")
+    ser.send(ptcbp.serialize_control('reset'))
 
     # Dump status
-    ser.send(b"\x1b\x69\x53")
-    print_status( ser.recv(32) )
+    ser.send(ptcbp.serialize_control('get_status'))
+    status = ptstatus.unpack_status(ser.recv(32))
+    ptstatus.print_status(status)
+
+    if status.err != 0x0000 or status.phase_type != 0x00 or status.phase != 0x0000:
+        print('** Printer indicates that it is not ready. Refusing to continue.')
+        sys.exit(1)
+
+    print('=> Configuring printer...')
 
     # Flush print buffer
     ser.send(b"\x00" * 64)
 
     # Initialize
-    ser.send(b"\x1b\x40")
+    ser.send(ptcbp.serialize_control('reset'))
 
     # Enter raster graphics (PTCBP) mode
-    ser.send(b"\x1b\x69\x61\x01")
+    ser.send(ptcbp.serialize_control('use_command_set', ptcbp.CommandSet.ptcbp))
 
-    # Found docs on http://www.undocprint.org/formats/page_description_languages/brother_p-touch
-    ser.send(b"\x1B\x69\x7A") # Set media & quality
-    ser.send(b"\xC4\x01") # print quality, continuous roll
-    ser.send(b"\x0C") # Tape width in mm
-    ser.send(b"\x00") # Label height in mm (0 for continuous roll)
-
-    # Number of raster lines in image data
-    raster_lines = len(data) >> 4
-    ser.send(raster_lines.to_bytes(2, 'little'))
-
-    # Unused data bytes in the "set media and quality" command
-    ser.send(b"\x00\x00\x00\x00")
+    # Set media & quality
+    raster_lines = len(data) // 16
+    ser.send(ptcbp.serialize_control_obj('set_print_parameters', ptcbp.PrintParameters(
+        active_fields=(ptcbp.PrintParameterField.width |
+                       ptcbp.PrintParameterField.quality |
+                       ptcbp.PrintParameterField.recovery),
+        media_type=ptcbp.MediaType.laminated,
+        width_mm=12, # Tape width in mm
+        length_mm=0, # Label height in mm (0 for continuous roll)
+        length_px=raster_lines, # Number of raster lines in image data
+        is_follow_up=0, # Unused
+        sbz=0, # Unused
+    )))
 
     # Set print chaining off (0x8) or on (0x0)
-    ser.send(b"\x1B\x69\x4B\x08")
+    ser.send(ptcbp.serialize_control('set_page_mode_advanced', ptcbp.PageModeAdvanced.no_page_chaining))
 
     # Set no mirror, no auto tape cut
-    ser.send(b"\x1B\x69\x4D\x00")
+    ser.send(ptcbp.serialize_control('set_page_mode', 0x00))
 
     # Set margin amount (feed amount)
-    ser.send(b"\x1B\x69\x64\x00\x00")
+    ser.send(ptcbp.serialize_control('set_page_margin', 0))
 
     # Set compression mode: TIFF
-    ser.send(b"\x4D\x02")
+    ser.send(ptcbp.serialize_control('compression', ptcbp.CompressionType.rle))
 
     # Send image data
-    print("Sending image data")
+    print(f"=> Sending image data ({raster_lines} lines)...")
     for line in encode_raster_transfer(data):
         ser.send( line )
-    print("Done")
+        sys.stdout.write(line[0:1].decode('ascii'))
+        sys.stdout.flush()
+    print()
+    print("=> Image data was sent successfully. Printing will begin soon.")
 
     # Print and feed
-    ser.send(b"\x1A")
+    ser.send(ptcbp.serialize_control('print'))
 
     # Dump status that the printer returns
-    print_status( ser.recv(32) )
+    status = ptstatus.unpack_status(ser.recv(32))
+    ptstatus.print_status(status)
+
+    print("=> All done.")
 
     # Initialize
-    ser.send(b"\x1b\x40")
+    ser.send(b"\x00" * 64)
+    ser.send(ptcbp.serialize_control('reset'))

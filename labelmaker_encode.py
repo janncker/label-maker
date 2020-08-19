@@ -1,11 +1,6 @@
-import packbits
+import ptcbp
 import png
-import struct
 from io import BytesIO
-
-# "Raster graphics transfer" serial command
-TRANSFER_COMMAND = b"G"
-ZERO_COMMAND = b"Z"
 
 def encode_raster_transfer(data):
     """ Encode 1 bit per pixel image data for transfer over serial to the printer """
@@ -17,50 +12,9 @@ def encode_raster_transfer(data):
     for i in range(0, len(data), chunk_size):
         chunk = data[i : i + chunk_size]
         if chunk == zero_line:
-            yield ZERO_COMMAND
-            continue
-
-        buf = BytesIO()
-        # Encode as tiff
-        packed_chunk = packbits.encode(chunk)
-
-        # Write header
-        buf.write(TRANSFER_COMMAND)
-
-        # Write number of bytes to transfer (n1 + n2*256)
-        length = len(packed_chunk)
-        buf.write(length.to_bytes(2, 'little'))
-
-        # Write data
-        buf.write(packed_chunk)
-        yield buf.getvalue()
-
-def decode_raster_transfer(data):
-    """ Read data encoded as T encoded as TIFF with transfer headers """
-
-    buf = bytearray()
-    i = 0
-
-    while i < len(data):
-        if data[i] == TRANSFER_COMMAND:
-            # Decode number of bytes to transfer
-            num_bytes = int.from_bytes(data[i+1:i+3], little)
-
-            # Copy contents of transfer to output buffer
-            transferedData = data[i + 3 : i + 3 + num_bytes]
-            buf.extend(transferedData)
-
-            # Confirm
-            if len(transferedData) != num_bytes:
-                raise Exception("Failed to read %d bytes at index %s: end of input data reached." % (num_bytes, i))
-
-            # Shift to the next position after these command and data bytes
-            i = i + 3 + num_bytes
-
+            yield ptcbp.serialize_control('zerofill')
         else:
-            raise Exception("Unexpected byte %s" % data[i])
-
-    return buf
+            yield ptcbp.serialize_data(chunk, 'rle')
 
 def read_png(path):
     """ Read a (monochrome) PNG image and convert to 1bpp raw data
