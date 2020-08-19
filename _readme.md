@@ -14,16 +14,21 @@ This needs a few modules installed to run:
 
 ```
 pybluez
-pypng
+pillow
 packbits
 ```
 
 Then it can be used as:
 
 ```sh
-# Existing image formated to spec above
-./labelmaker.py <bdaddr of your printer> -i monochrome-128px-wide-image.png
+# Existing image (typical use case)
+./labelmaker.py <bdaddr of your printer> -i horizontal-label-image.png
 
+# Existing image formated to spec above (advanced)
+# -r disables all built-in image pre-processing
+./labelmaker.py <bdaddr of your printer> -i monochrome-128px-wide-image.png -r
+
+# (If using option 2)
 # Using imagemagick to get a usable input image from any horizontal oriented image
 # -resize 128x can be used instead of -crop 128x as needed
 # -rotate 90 can be removed if the image is portrait already

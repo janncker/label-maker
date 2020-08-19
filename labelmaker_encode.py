@@ -1,5 +1,5 @@
 import ptcbp
-import png
+from PIL import Image, ImageOps
 from io import BytesIO
 
 def encode_raster_transfer(data):
@@ -16,34 +16,23 @@ def encode_raster_transfer(data):
         else:
             yield ptcbp.serialize_data(chunk, 'rle')
 
-def read_png(path):
-    """ Read a (monochrome) PNG image and convert to 1bpp raw data
+def read_png(path, transform=True, padding=True, dither=True):
+    """ Read a image and convert to 1bpp raw data
 
     This should work with any 8 bit PNG. To ensure compatibility, the image can
     be processed with Imagemagick first using the -monochrome flag.
     """
-
-    buf = bytearray()
-
-    # State for bit packing
-    bit_cursor = 8
-    byte = 0
-
-    # Read the PNG image
-    reader = png.Reader(filename=path)
-    width, height, rows, metadata = reader.asRGB()
-
-    # Loop over image and pack into 1bpp buffer
-    for row in rows:
-        for pixel in range(0, len(row), 3):
-            bit_cursor -= 1
-
-            if row[pixel] == 0:
-                byte |= (1 << bit_cursor)
-
-            if bit_cursor == 0:
-                buf.append(byte)
-                byte = 0
-                bit_cursor = 8
-
-    return buf
+    image = Image.open(path)
+    tmp = image.convert('1', dither=Image.FLOYDSTEINBERG if dither else Image.NONE)
+    tmp = ImageOps.invert(tmp.convert('L')).convert('1')
+    if transform:
+        tmp = tmp.rotate(-90, expand=True)
+        tmp = ImageOps.mirror(tmp)
+    if padding:
+        w, h = tmp.size
+        padded = Image.new('1', (128, h))
+        x, y = (128-w)//2, 0
+        nw, nh = x+w, y+h
+        padded.paste(tmp, (x, y, nw, nh))
+        tmp = padded
+    return tmp.tobytes()

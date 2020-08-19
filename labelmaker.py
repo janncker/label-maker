@@ -19,6 +19,7 @@ def parse_args():
     p.add_argument('-F', '--no-feed', help='Disable feeding at the end of the print (chaining).')
     p.add_argument('-a', '--auto-cut', help='Enable auto-cutting (or print label boundary on e.g. PT-P300BT).')
     p.add_argument('-m', '--end-margin', help='End margin (in dots).', default=0, type=int)
+    p.add_argument('-r', '--raw', help='Send the image to printer as-is without any pre-processing.', action='store_true')
     return p, p.parse_args()
 
 def reset_printer(ser):
@@ -117,7 +118,10 @@ def main():
         p.error('An image must be specified for printing job.')
     else:
         # Read input image into memory
-        data = read_png(args.image)
+        if args.raw:
+            data = read_png(args.image, False, False, False)
+        else:
+            data = read_png(args.image)
 
     # Get bluetooth socket
     with contextlib.closing(bluetooth.BluetoothSocket(bluetooth.RFCOMM)) as ser:

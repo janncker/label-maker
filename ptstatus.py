@@ -236,8 +236,8 @@ if __name__ == '__main__':
     with contextlib.closing(bluetooth.BluetoothSocket(bluetooth.RFCOMM)) as sock:
         sock.connect((addr, ch))
         sock.send(b'\x00'*64)
-        sock.send(ptcbp.serialize_simple('reset'))
-        sock.send(ptcbp.serialize_simple('get_status'))
+        sock.send(ptcbp.serialize_control('reset'))
+        sock.send(ptcbp.serialize_control('get_status'))
         resp = StatusRegister()
         buf = sock.recv(32)
         ctypes.memmove(ctypes.addressof(resp), buf, ctypes.sizeof(resp))
