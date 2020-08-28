@@ -23,9 +23,9 @@ CMD_SCHEMA = (
     (b'M', 'compression', 'B', None),
     (b'\x0c', 'print_page', None, None),
     (b'\x1a', 'print', None, None),
-    (b'g', 'data', 'H', (lambda params: params[0], lambda params, l: params.__setitem__(0, l), 1)),
+    (b'g', 'data2', 'H', (lambda params: params[0], lambda params, l: params.__setitem__(0, l), 1)),
     # TODO is it really for RLE data or just an alias to 'g'?
-    (b'G', 'data_rle', 'H', (lambda params: params[0], lambda params, l: params.__setitem__(0, l), 1)),
+    (b'G', 'data', 'H', (lambda params: params[0], lambda params, l: params.__setitem__(0, l), 1)),
     (b'Z', 'zerofill', None, None),
 )
 
@@ -220,9 +220,10 @@ def serialize_control(mnemonic: str, *params) -> bytes:
 def serialize_control_obj(mnemonic, params=None):
     return Opcode(op_mnemonic=mnemonic, params=params).serialize_as_bytes()
 
-def serialize_data(data, compress='none'):
-    if compress == 'none':
-        mnemonic = 'data'
+def serialize_data(data, compress='none', use_data2=False):
+    if use_data2 and compress == 'none':
+        # Some printers seem to use data2 to transfer uncompressed raster lines.
+        mnemonic = 'data2'
     else:
-        mnemonic = 'data_rle'
+        mnemonic = 'data'
     return Opcode(op_mnemonic=mnemonic, data=Data(data, compress=compress)).serialize_as_bytes()

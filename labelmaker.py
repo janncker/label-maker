@@ -20,6 +20,7 @@ def parse_args():
     p.add_argument('-a', '--auto-cut', help='Enable auto-cutting (or print label boundary on e.g. PT-P300BT).')
     p.add_argument('-m', '--end-margin', help='End margin (in dots).', default=0, type=int)
     p.add_argument('-r', '--raw', help='Send the image to printer as-is without any pre-processing.', action='store_true')
+    p.add_argument('-C', '--nocomp', help='Disable compression.', action='store_true')
     return p, p.parse_args()
 
 def reset_printer(ser):
@@ -89,11 +90,12 @@ def do_print_job(ser, args, data):
                                           status.tape_length),
                       chaining=args.no_feed,
                       auto_cut=args.auto_cut,
-                      end_margin=args.end_margin)
+                      end_margin=args.end_margin,
+                      compress=not args.nocomp)
 
     # Send image data
     print(f"=> Sending image data ({raster_lines} lines)...")
-    for line in encode_raster_transfer(data):
+    for line in encode_raster_transfer(data, args.nocomp):
         ser.send(line)
         sys.stdout.write(line[0:1].decode('ascii'))
         sys.stdout.flush()

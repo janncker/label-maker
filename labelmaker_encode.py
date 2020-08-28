@@ -2,7 +2,7 @@ import ptcbp
 from PIL import Image, ImageOps
 from io import BytesIO
 
-def encode_raster_transfer(data):
+def encode_raster_transfer(data, nocomp=False):
     """ Encode 1 bit per pixel image data for transfer over serial to the printer """
     # Send in chunks of 1 line (128px @ 1bpp = 16 bytes)
     # This mirrors the official app from Brother. Other values haven't been tested.
@@ -14,7 +14,7 @@ def encode_raster_transfer(data):
         if chunk == zero_line:
             yield ptcbp.serialize_control('zerofill')
         else:
-            yield ptcbp.serialize_data(chunk, 'rle')
+            yield ptcbp.serialize_data(chunk, 'none' if nocomp else 'rle')
 
 def read_png(path, transform=True, padding=True, dither=True):
     """ Read a image and convert to 1bpp raw data
