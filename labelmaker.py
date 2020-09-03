@@ -10,6 +10,8 @@ import ctypes
 import ptcbp
 import ptstatus
 
+BARS = '_▁▂▃▄▅▆▇█'
+
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('bdaddr', help='BDADDR of the printer.')
@@ -95,10 +97,16 @@ def do_print_job(ser, args, data):
 
     # Send image data
     print(f"=> Sending image data ({raster_lines} lines)...")
+    sys.stdout.write('[')
     for line in encode_raster_transfer(data, args.nocomp):
-        ser.send(line)
-        sys.stdout.write(line[0:1].decode('ascii'))
+        if line[0:1] == b'G':
+            sys.stdout.write(BARS[min((len(line) - 3) // 2, 7) + 1])
+        elif line[0:1] == b'Z':
+            sys.stdout.write(BARS[0])
         sys.stdout.flush()
+        ser.send(line)
+    sys.stdout.write(']')
+
     print()
     print("=> Image data was sent successfully. Printing will begin soon.")
 
