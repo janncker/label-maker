@@ -5,7 +5,7 @@ from PIL import ImageDraw
 from PIL import ImageFont
 from PIL import ImageOps
 import sys
-
+import os
 
 def getSize(txt, font):
     testImg = Image.new('1', (1, 1))
@@ -19,12 +19,12 @@ LABEL_C_MODE_MERGIN = 20
 IMG_STD_HEIGHT = 64
 
 
-def draw_text(text, fontfile = None, vertical = None, fontsize = 0):
+def draw_text(text, fontfile = None, vertical = None, fontsize = 0, tape_width = 12):
     if not fontfile:
-        fontfile = './yahei.ttf'
+        fontfile = os.path.join(os.path.dirname(__file__), 'yahei.ttf')
 
-    print(fontfile)
-
+    ## Only tested with 12mm tape
+    ## todo: support the other width
 
     if vertical:
 

@@ -11,12 +11,13 @@ import ptcbp
 import ptstatus
 import curses
 from PIL import ImageOps
+import configparser
+import os
 
 BARS = '_▁▂▃▄▅▆▇█'
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument('bdaddr', help='BDADDR of the printer.')
     p.add_argument('-i', '--image', help='Image file to print.')
     p.add_argument('-c', '--rfcomm-channel', help='RFCOMM channel. Normally this does not need to be changed.', default=1, type=int)
     p.add_argument('-n', '--no-print', help='Only configure the printer and send the image but do not send print command.', action='store_true')
@@ -127,11 +128,11 @@ def do_print_job(ser, args, data):
 
 def main():
     p, args = parse_args()
-    print(args)
+
     data = None
     if args.label:
         print("Processing %s" %(args.label))
-        img = draw_text(args.label, vertical = args.vertical, fontsize = args.size)
+        img = draw_text(args.label, vertical = args.vertical, fontsize = args.size, tape_width = tape_width)
         ImageOps.mirror(img).show()
 
 
@@ -158,7 +159,7 @@ def main():
     # Get bluetooth socket
     with contextlib.closing(bluetooth.BluetoothSocket(bluetooth.RFCOMM)) as ser:
         print('=> Connecting to printer...')
-        ser.connect((args.bdaddr, args.rfcomm_channel))
+        ser.connect((printer_address, args.rfcomm_channel))
 
         try:
             assert data is not None
@@ -168,4 +169,10 @@ def main():
             reset_printer(ser)
 
 if __name__ == '__main__':
+
+
+    conf = configparser.ConfigParser()
+    conf.read(os.path.join(os.path.dirname(__file__), "config.ini"))
+    printer_address = conf.get("printer", 'address')
+    tape_width = conf.get("printer", "tape_width")
     main()
