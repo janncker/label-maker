@@ -21,7 +21,8 @@ IMG_STD_HEIGHT = 64
 
 def draw_text(text, fontfile = None, vertical = None, fontsize = 0, tape_width = 12):
     if not fontfile:
-        fontfile = os.path.join(os.path.dirname(__file__), 'yahei.ttf')
+        #fontfile = os.path.join(os.path.dirname(__file__), 'yahei.ttf')
+        fontfile = "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf"
 
     ## Only tested with 12mm tape
     ## todo: support the other width
