@@ -1,7 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 from labelmaker_encode import encode_raster_transfer, read_png
-
+from characters import draw_text
 import argparse
 import bluetooth
 import sys
@@ -9,6 +9,8 @@ import contextlib
 import ctypes
 import ptcbp
 import ptstatus
+import curses
+from PIL import ImageOps
 
 BARS = '_▁▂▃▄▅▆▇█'
 
@@ -23,6 +25,9 @@ def parse_args():
     p.add_argument('-m', '--end-margin', help='End margin (in dots).', default=0, type=int)
     p.add_argument('-r', '--raw', help='Send the image to printer as-is without any pre-processing.', action='store_true')
     p.add_argument('-C', '--nocomp', help='Disable compression.', action='store_true')
+    p.add_argument('-l', '--label', help="String to print.")
+    p.add_argument('-v', '--vertical', help="Print in vertical.", action='store_true')
+    p.add_argument('-s', '--size', help="Front size.", type=int, default=0)
     return p, p.parse_args()
 
 def reset_printer(ser):
@@ -122,11 +127,28 @@ def do_print_job(ser, args, data):
 
 def main():
     p, args = parse_args()
-
+    print(args)
     data = None
-    if args.image is None:
-        p.error('An image must be specified for printing job.')
-    else:
+    if args.label:
+        print("Processing %s" %(args.label))
+        img = draw_text(args.label, vertical = args.vertical, fontsize = args.size)
+        ImageOps.mirror(img).show()
+
+
+        stdscr = curses.initscr()
+        stdscr.addstr(10, 10, "Press ESC to cancel, or any other key to print the label...")
+        stdscr.refresh()
+        c = stdscr.getch()
+        curses.endwin()
+
+        # if Not ESC , go print
+        if c != 27 :
+            print("Printing")
+            data = read_png(None, False, False, False, img)
+        else:
+            sys.exit(0)
+
+    elif args.image:
         # Read input image into memory
         if args.raw:
             data = read_png(args.image, False, False, False)

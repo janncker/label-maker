@@ -16,15 +16,18 @@ def encode_raster_transfer(data, nocomp=False):
         else:
             yield ptcbp.serialize_data(chunk, 'none' if nocomp else 'rle')
 
-def read_png(path, transform=True, padding=True, dither=True):
+def read_png(path, transform=True, padding=True, dither=True, data=None):
     """ Read a image and convert to 1bpp raw data
 
     This should work with any 8 bit PNG. To ensure compatibility, the image can
     be processed with Imagemagick first using the -monochrome flag.
     """
-    image = Image.open(path)
-    tmp = image.convert('1', dither=Image.FLOYDSTEINBERG if dither else Image.NONE)
-    tmp = ImageOps.invert(tmp.convert('L')).convert('1')
+    if data:
+        tmp = data
+    else:
+        image = Image.open(path)
+        tmp = image.convert('1', dither=Image.FLOYDSTEINBERG if dither else Image.NONE)
+        tmp = ImageOps.invert(tmp.convert('L')).convert('1')
     if transform:
         tmp = tmp.rotate(-90, expand=True)
         tmp = ImageOps.mirror(tmp)
